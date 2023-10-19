@@ -611,7 +611,8 @@ class UNetModel(nn.Module):
 
         self.out = nn.Sequential(
             normalization(ch),
-            nn.SiLU(),
+            # nn.SiLU(), #v2
+            nn.Tanh(), #v1
             zero_module(conv_nd(dims, input_ch, out_channels, 3, padding=1)),
         )
 

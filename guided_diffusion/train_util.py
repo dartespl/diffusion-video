@@ -38,6 +38,8 @@ class TrainLoop:
         schedule_sampler=None,
         weight_decay=0.0,
         lr_anneal_steps=0,
+
+        use_neptune=False
     ):
         self.model = model
         self.diffusion = diffusion
@@ -58,6 +60,25 @@ class TrainLoop:
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
         self.weight_decay = weight_decay
         self.lr_anneal_steps = lr_anneal_steps
+
+
+        ########## setup neptune #################
+        import neptune
+        self.use_neptune = use_neptune
+        if self.use_neptune:
+            run = neptune.init_run(
+                project="dartespl/diffusion-video",
+                api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5OGMwNjU0Ny1lY2Q5LTRiZWItODU4ZS1mYWRiYTU2MTYxODUifQ==",
+            )
+            params = {
+                "lr": lr,
+                "bs": batch_size,
+                "input_sz": 32 * 32 * 3,
+                "n_classes": 10,
+            }
+            run["parameters"] = params
+            self.run = run
+        #####################################################
 
         self.step = 0
         self.resume_step = 0
@@ -155,7 +176,9 @@ class TrainLoop:
             not self.lr_anneal_steps
             or self.step + self.resume_step < self.lr_anneal_steps
         ):
+            logger.log("1")
             batch, cond = next(self.data)
+            logger.log("2")
             self.run_step(batch, cond)
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
@@ -169,6 +192,11 @@ class TrainLoop:
         if (self.step - 1) % self.save_interval != 0:
             self.save()
 
+        ############################
+        if self.use_neptune:
+            self.run.stop()
+        ##############################
+
     def run_step(self, batch, cond):
         self.forward_backward(batch, cond)
         took_step = self.mp_trainer.optimize(self.opt)
@@ -178,15 +206,22 @@ class TrainLoop:
         self.log_step()
 
     def forward_backward(self, batch, cond):
+        # batch = th.tensor(batch) # dodane
         self.mp_trainer.zero_grad()
-        for i in range(0, batch.shape[0], self.microbatch):
-            micro = batch[i : i + self.microbatch].to(dist_util.dev())
-            micro_cond = {
-                k: v[i : i + self.microbatch].to(dist_util.dev())
-                for k, v in cond.items()
-            }
-            last_batch = (i + self.microbatch) >= batch.shape[0]
-            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
+        # for i in range(0, batch.shape[0], self.microbatch):
+        for i in range(0, len(batch), self.microbatch):
+            # micro = batch[i : i + self.microbatch].to(dist_util.dev())
+            # micro_cond = {
+            #     k: v[i : i + self.microbatch].to(dist_util.dev())
+            #     for k, v in cond.items()
+            # }
+            # last_batch = (i + self.microbatch) >= batch.shape[0]
+            micro = batch[i : i + self.microbatch]
+            micro_cond = None
+            last_batch = (i + self.microbatch) >= len(batch)
+            # logger.log(micro.shape[0])
+            # t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
+            t, weights = self.schedule_sampler.sample(len(micro), dist_util.dev())
 
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
@@ -211,6 +246,10 @@ class TrainLoop:
             log_loss_dict(
                 self.diffusion, t, {k: v * weights for k, v in losses.items()}
             )
+            ############################
+            if self.use_neptune:
+                self.run["train/batch/loss"].append(loss)
+            ##############################
             self.mp_trainer.backward(loss)
 
     def _update_ema(self):
