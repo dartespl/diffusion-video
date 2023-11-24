@@ -796,7 +796,7 @@ class GaussianDiffusion:
         noise = None
         for i in range(len(t)):
             if t[i] == 0:
-                t[i] = th.randint(1, 128, (1,)) ######################## zmiana
+                t[i] = th.randint(1, self.num_frames, (1,)) ######################## zmiana
 
         paths = x_start
         x_t = self.q_sample_frames(paths, t)
@@ -858,12 +858,8 @@ class GaussianDiffusion:
             op2 = []
             ti = self.q_sample_frames(paths, t)
             ti_minus = self.q_sample_frames(paths, t-1)
-            logger.log(ti.shape, ti_minus.shape)
             target = ti_minus - ti
 
-            if th.randint(1, 500, (1,)) == 1:
-                self.save_image_to_neptune(ti[0].unsqueeze(0), str(t[0]))
-                self.save_image_to_neptune(ti_minus[0].unsqueeze(0), str(t[0]-1))
 
 
 
@@ -896,20 +892,13 @@ class GaussianDiffusion:
             raise NotImplementedError(self.loss_type)
 
         return terms
-    
+
     def q_sample_frames(self, paths, t):
         transformed = []
         for i in range(t.shape[0]):
             from guided_diffusion import logger
-            # if not paths[i]:
-            #     continue
-            # logger.log(paths[0], t[0])
             frame = self.extractFrame(paths[i], t[i].item())
-            # if frame is None:
-            #     continue
-            # logger.log(frame[0])
             img = self.transformImage(frame)
-            # logger.log(img[0])
             transformed.append(img)
 
         from . import dist_util
@@ -919,19 +908,17 @@ class GaussianDiffusion:
         from guided_diffusion.image_datasets import center_crop_arr
         img = th.tensor(img.copy())
         img = np.transpose(img, [2, 0, 1])
-        if th.randint(1, 500, (1,)) == 1:
-            self.save_image_to_neptune(img.unsqueeze(0), "przed pillowaniem")
         import torchvision
         img = torchvision.transforms.functional.to_pil_image(img)
         # print(img.shape)
-        
+
         # print(img.shape)
         arr = center_crop_arr(img, self.img_size)
-        if th.randint(1, 500, (1,)) == 1:
-            a= np.transpose(arr, [2, 0, 1])
-            tens = th.tensor(a).unsqueeze(0)
-            self.save_image_to_neptune(tens, "po croppie")
-        logger.log(arr)
+        # if th.randint(1, 500, (1,)) == 1:
+        #     a= np.transpose(arr, [2, 0, 1])
+        #     tens = th.tensor(a).unsqueeze(0)
+        #     self.save_image_to_neptune(tens, "po croppie")
+        # logger.log(arr)
         arr = arr.astype(np.float32) / 127.5 - 1
         return np.transpose(arr, [2, 0, 1])
 
@@ -943,10 +930,10 @@ class GaussianDiffusion:
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         seconds = int(frames / fps)
 
-        vidcap.set(cv2.CAP_PROP_POS_MSEC,(frame_num * (seconds*8)))    # added this line 
+        vidcap.set(cv2.CAP_PROP_POS_MSEC,(frame_num * (seconds*(1000/self.num_frames))))    # added this line
         success,image = vidcap.read()
         if image is None:
-            vidcap.set(cv2.CAP_PROP_POS_MSEC,0)    # added this line 
+            vidcap.set(cv2.CAP_PROP_POS_MSEC,0)    # added this line
             success,image = vidcap.read()
         return image[..., ::-1]
 

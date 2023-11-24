@@ -47,6 +47,7 @@ def main():
     model.to(dist_util.dev())
 
     diffusion.img_size = args.image_size
+    diffusion.num_frames = args.diffusion_steps
 
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
