@@ -42,7 +42,9 @@ def main():
 
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
+        **args_to_dict(args, model_and_diffusion_defaults().keys()),
+        two_imgs_input=True,
+        two_imgs_output=True,
     )
     model.to(dist_util.dev())
 
@@ -114,56 +116,6 @@ def save_image_to_neptune(run, img, label):
             ),  # You can upload arrays as images using the File.as_image() method
             name=label,
         )
-
-# def q_sample_frames(paths, t):
-#     transformed = []
-#     for i in range(t.shape[0]):
-#         frame = extractFrame(paths[i], t[i].item())
-#         img = transformImage(frame)
-#         transformed.append(img)
-#     return torch.tensor(transformed)
-
-# def transformImage(img):
-#     from guided_diffusion.image_datasets import center_crop_arr
-#     img = torch.tensor(img)
-#     img = np.transpose(img, [2, 0, 1])
-#     import torchvision
-#     # print(img.shape)
-#     img = torchvision.transforms.functional.to_pil_image(img)
-#     # print(img.shape)
-#     arr = center_crop_arr(img, 32)
-#     arr = arr.astype(np.float32) / 127.5 - 1
-#     return np.transpose(arr, [2, 0, 1])
-
-# def extractFrame(pathIn, frame_num):
-#     import cv2
-#     vidcap = cv2.VideoCapture(pathIn)
-#     success,image = vidcap.read()
-#     frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
-#     fps = vidcap.get(cv2.CAP_PROP_FPS)
-#     seconds = int(frames / fps)
-
-#     vidcap.set(cv2.CAP_PROP_POS_MSEC,(frame_num * (seconds*5)))    # added this line
-#     success,image = vidcap.read()
-#     return image
-
-# def extractImages(pathIn, pathOut='./images/'):
-#     count = 0
-#     vidcap = cv2.VideoCapture(pathIn)
-#     success,image = vidcap.read()
-#     success = True
-#     # vidcap.set(cv2.CAP_PROP_FRAME_COUNT, 100)
-#     # count the number of frames
-#     frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
-#     fps = vidcap.get(cv2.CAP_PROP_FPS)
-#     seconds = int(frames / fps)
-
-#     while success:
-#         vidcap.set(cv2.CAP_PROP_POS_MSEC,(count * (seconds*5)))    # added this line
-#         success,image = vidcap.read()
-#         print ('Read a new frame: ', success)
-#         cv2.imwrite( pathOut + "\\frame%d.jpg" % count, image)     # save frame as JPEG file
-#         count = count + 1
 
 def load_data(
     *,

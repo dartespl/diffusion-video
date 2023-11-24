@@ -57,7 +57,7 @@ def main():
     data = load_data(
         data_dir=args.data_dir,
         batch_size=1,
-        image_size=128,
+        image_size=args.image_size,
         class_cond=False,
         deterministic=False
     )
@@ -67,22 +67,22 @@ def main():
 
     ###############
     model_kwargs = None
-    shape = (1,3,128,128)
+    shape = (1,3,args.image_size,args.image_size)
     progress = False
 
     device = dist_util.dev()
-    assert isinstance(shape, (tuple, list))
+    # assert isinstance(shape, (tuple, list))
     # if noise is not None:
     #     img = noise
     # else:
     #     img = th.randn(*shape, device=device)
-    imgs = q_sample_last_frames(paths).to(device)
+    imgs = q_sample_last_frames(paths, args.image_size, args.diffusion_steps).to(device)
     # img = imgs[0]
     # img = th.randn(*shape, device=device)
     indices = list(range(diffusion.num_timesteps))
 
 
-    logger.log(imgs.shape, shape)
+    # logger.log(imgs.shape, shape)
 
     if progress:
         # Lazy import so that we don't depend on tqdm.
@@ -115,15 +115,15 @@ def save_image_to_neptune(run, img, label):
             ),  # You can upload arrays as images using the File.as_image() method
             name=label,
         )
-def q_sample_last_frames(paths):
+def q_sample_last_frames(paths, img_size, diff_steps):
     transformed = []
     for i in range(len(paths)):
-        frame = extractFrame(paths[i], 128)
-        img = transformImage(frame)
+        frame = extractFrame(paths[i], diff_steps, diff_steps)
+        img = transformImage(frame, img_size)
         transformed.append(img)
     return torch.tensor(transformed)
 
-def transformImage(img):
+def transformImage(img, img_size):
     from guided_diffusion.image_datasets import center_crop_arr
     img = torch.tensor(img.copy())
     img = np.transpose(img, [2, 0, 1])
@@ -131,11 +131,11 @@ def transformImage(img):
     # print(img.shape)
     img = torchvision.transforms.functional.to_pil_image(img)
     # print(img.shape)
-    arr = center_crop_arr(img, 128)
+    arr = center_crop_arr(img, img_size)
     arr = arr.astype(np.float32) / 127.5 - 1
     return np.transpose(arr, [2, 0, 1])
 
-def extractFrame(pathIn, frame_num):
+def extractFrame(pathIn, frame_num, diff_steps):
     import cv2
     vidcap = cv2.VideoCapture(pathIn)
     success,image = vidcap.read()
@@ -143,7 +143,7 @@ def extractFrame(pathIn, frame_num):
     fps = vidcap.get(cv2.CAP_PROP_FPS)
     seconds = int(frames / fps)
 
-    vidcap.set(cv2.CAP_PROP_POS_MSEC,(frame_num * (seconds*5)))    # added this line 
+    vidcap.set(cv2.CAP_PROP_POS_MSEC,(frame_num * (seconds*(1000/diff_steps))))    # added this line 
     success,image = vidcap.read()
     # cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image[..., ::-1]
