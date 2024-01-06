@@ -791,18 +791,36 @@ class GaussianDiffusion:
         # x_t = self.q_sample(x_start, t, noise=noise)
         ################################################################################
         # logger.log(x_start)
+
+        from guided_diffusion import logger, dist_util
+
+
         if model_kwargs is None:
             model_kwargs = {}
         noise = None
         for i in range(len(t)):
-            if t[i] == 0:
-                t[i] = th.randint(1, self.num_frames, (1,)) ######################## zmiana
+            if t[i] == self.num_frames-1:
+                t[i] = th.randint(0, self.num_frames-1, (1,)) ######################## zmiana
 
         paths = x_start
-        x_0 = self.q_sample_frames(paths, th.zeros_like(t))
+        # x_0 = self.q_sample_frames(paths, th.zeros_like(t))
+        # x_t = self.q_sample_frames(paths, t)
+        # x_0_t = th.cat([x_0, x_t], dim=1)
+        # logger.log("x_0_t", x_0_t.shape)
+
+        # x_0 = self.q_sample_frames(paths, th.zeros_like(t))
+        # x_t = self.q_sample_frames(paths, t)
+        # x_0_t = th.cat([x_0, x_t], dim=1)
+        # # x_0_t = th.cat([x_0, x_t-x_0], dim=1)
+
+
+
+        t_minus = t-1
+        t_minus = th.where(t_minus >= 0, t_minus, 0)
+        x_t_minus = self.q_sample_frames(paths, t_minus)
         x_t = self.q_sample_frames(paths, t)
-        x_0_t = th.cat([x_0, x_t], dim=0)
-        logger.log("x_0_t", x_0_t.shape)
+        x_t_minus_t = th.cat([x_t_minus, x_t], dim=1)
+
         ##################################################################################
 
         terms = {}
@@ -819,7 +837,7 @@ class GaussianDiffusion:
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
-            model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
+            model_output = model(x_t_minus_t, self._scale_timesteps(t), **model_kwargs)
 
             if self.model_var_type in [
                 ModelVarType.LEARNED,
@@ -853,12 +871,15 @@ class GaussianDiffusion:
 
 
             ############################# my ##########################################
-            from guided_diffusion import logger, dist_util
             logger.log(self.model_mean_type, self.loss_type, "vb" in terms)
 
-            ti = self.q_sample_frames(paths, t)
-            ti_minus = self.q_sample_frames(paths, t-1)
-            target = th.cat([ti, ti_minus], dim=0)
+            # ti = self.q_sample_frames(paths, t)
+            # ti_minus = self.q_sample_frames(paths, t-1)
+            # target = th.cat([ti, ti_minus], dim=1)
+            x_t = self.q_sample_frames(paths, t)
+            x_t_plus = self.q_sample_frames(paths, t+1)
+            # target = th.cat([x_t-x_0, x_t_plus-x_t], dim=1)
+            target = th.cat([x_t-x_t_minus, x_t_plus-x_t], dim=1)
 
 
 

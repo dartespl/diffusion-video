@@ -42,7 +42,9 @@ def main():
 
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
+        **args_to_dict(args, model_and_diffusion_defaults().keys()),
+        two_imgs_input=True,
+        two_imgs_output=True,
     )
     model.load_state_dict(
         dist_util.load_state_dict(args.model_path, map_location="cpu")
@@ -76,11 +78,13 @@ def main():
     #     img = noise
     # else:
     #     img = th.randn(*shape, device=device)
-    imgs = q_sample_last_frames(paths, args.image_size, args.diffusion_steps).to(device)
+    prev_imgs = q_sample_first_frames(paths, args.image_size, args.diffusion_steps).to(device)
+    imgs = prev_imgs
     # img = imgs[0]
     # img = th.randn(*shape, device=device)
     indices = list(range(diffusion.num_timesteps))
-    indices.reverse()###zmiana
+
+    # indices.reverse()
 
 
     # logger.log(imgs.shape, shape)
@@ -93,12 +97,15 @@ def main():
 
     for i in indices:
         save_image_to_neptune(run, imgs, f"image step {i}")
+        model_input = torch.cat([prev_imgs, imgs], dim=1)
         t = torch.tensor([i] * shape[0], device=device)
         with torch.no_grad():
-            model_output = model(imgs, diffusion._scale_timesteps(t))
-            # logger.log("output", model_output)
-            # logger.log("image", img)
-            imgs += model_output
+            model_output = model(model_input, diffusion._scale_timesteps(t))
+            logger.log("output", model_output.shape)
+            logger.log("image", imgs.shape)
+            # imgs = model_output[:, 3:]
+            prev_imgs = imgs
+            imgs += model_output[:, 3:]
     ################
 
     run.stop()
@@ -116,10 +123,10 @@ def save_image_to_neptune(run, img, label):
             ),  # You can upload arrays as images using the File.as_image() method
             name=label,
         )
-def q_sample_last_frames(paths, img_size, diff_steps):
+def q_sample_first_frames(paths, img_size, diff_steps):
     transformed = []
     for i in range(len(paths)):
-        frame = extractFrame(paths[i], diff_steps, diff_steps)
+        frame = extractFrame(paths[i], 0, diff_steps)
         img = transformImage(frame, img_size)
         transformed.append(img)
     return torch.tensor(transformed)
