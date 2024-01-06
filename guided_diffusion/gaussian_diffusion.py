@@ -815,11 +815,12 @@ class GaussianDiffusion:
 
 
 
+        x_0 = self.q_sample_frames(paths, th.zeros_like(t))
         t_minus = t-1
         t_minus = th.where(t_minus >= 0, t_minus, 0)
         x_t_minus = self.q_sample_frames(paths, t_minus)
         x_t = self.q_sample_frames(paths, t)
-        x_t_minus_t = th.cat([x_t_minus, x_t], dim=1)
+        x_t_minus_t_0 = th.cat([x_0, x_t_minus, x_t], dim=1)
 
         ##################################################################################
 
@@ -837,7 +838,7 @@ class GaussianDiffusion:
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
-            model_output = model(x_t_minus_t, self._scale_timesteps(t), **model_kwargs)
+            model_output = model(x_t_minus_t_0, self._scale_timesteps(t), **model_kwargs)
 
             if self.model_var_type in [
                 ModelVarType.LEARNED,
@@ -879,7 +880,7 @@ class GaussianDiffusion:
             x_t = self.q_sample_frames(paths, t)
             x_t_plus = self.q_sample_frames(paths, t+1)
             # target = th.cat([x_t-x_0, x_t_plus-x_t], dim=1)
-            target = th.cat([x_t-x_t_minus, x_t_plus-x_t], dim=1)
+            target = th.cat([x_t_minus-x_0, x_t-x_t_minus, x_t_plus-x_t], dim=1)
 
 
 
